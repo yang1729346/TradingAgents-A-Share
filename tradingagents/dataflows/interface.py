@@ -23,6 +23,17 @@ from .alpha_vantage import (
     get_global_news as get_alpha_vantage_global_news,
 )
 from .alpha_vantage_common import AlphaVantageRateLimitError
+from .eastmoney import (
+    get_stock as get_eastmoney_stock,
+    get_indicators as get_eastmoney_indicators,
+    get_fundamentals as get_eastmoney_fundamentals,
+    get_balance_sheet as get_eastmoney_balance_sheet,
+    get_cashflow as get_eastmoney_cashflow,
+    get_income_statement as get_eastmoney_income_statement,
+    get_news as get_eastmoney_news,
+    get_global_news as get_eastmoney_global_news,
+    get_insider_transactions as get_eastmoney_insider_transactions,
+)
 
 # Configuration and routing logic
 from .config import get_config
@@ -63,6 +74,7 @@ TOOLS_CATEGORIES = {
 VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
+    "eastmoney",
 ]
 
 # Mapping of methods to their vendor-specific implementations
@@ -71,41 +83,50 @@ VENDOR_METHODS = {
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
+        "eastmoney": get_eastmoney_stock,
     },
     # technical_indicators
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
+        "eastmoney": get_eastmoney_indicators,
     },
     # fundamental_data
     "get_fundamentals": {
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
+        "eastmoney": get_eastmoney_fundamentals,
     },
     "get_balance_sheet": {
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
+        "eastmoney": get_eastmoney_balance_sheet,
     },
     "get_cashflow": {
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
+        "eastmoney": get_eastmoney_cashflow,
     },
     "get_income_statement": {
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
+        "eastmoney": get_eastmoney_income_statement,
     },
     # news_data
     "get_news": {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
+        "eastmoney": get_eastmoney_news,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
+        "eastmoney": get_eastmoney_global_news,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
+        "eastmoney": get_eastmoney_insider_transactions,
     },
 }
 
@@ -133,6 +154,9 @@ def get_vendor(category: str, method: str = None) -> str:
 
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
@@ -147,6 +171,7 @@ def route_to_vendor(method: str, *args, **kwargs):
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    last_error = None
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
@@ -155,8 +180,17 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
-        except AlphaVantageRateLimitError:
-            continue  # Only rate limits trigger fallback
+            result = impl_func(*args, **kwargs)
+            # If the result is an error or empty, try the next vendor
+            if isinstance(result, str) and (result.startswith("Error") or result.startswith("No ")):
+                logger.warning("%s via %s: %s", method, vendor, result[:100])
+                last_error = result
+                continue
+            return result
+        except Exception as e:
+            logger.warning("%s via %s failed: %s", method, vendor, e)
+            last_error = str(e)
+            continue
 
-    raise RuntimeError(f"No available vendor for '{method}'")
+    # All vendors failed - return error string instead of crashing
+    return f"Error: all data sources failed for '{method}': {last_error}"

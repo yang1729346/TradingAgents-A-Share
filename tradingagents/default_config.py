@@ -16,6 +16,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS":    "max_debate_rounds",
     "TRADINGAGENTS_MAX_RISK_ROUNDS":      "max_risk_discuss_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
+    "TRADINGAGENTS_MAX_RECUR_LIMIT":      "max_recur_limit",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
 }
 
@@ -92,10 +93,10 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
-        "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
-        "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
-        "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "core_stock_apis": "eastmoney",       # Options: alpha_vantage, yfinance, eastmoney
+        "technical_indicators": "eastmoney",  # Options: alpha_vantage, yfinance, eastmoney
+        "fundamental_data": "eastmoney",      # Options: alpha_vantage, yfinance, eastmoney
+        "news_data": "eastmoney",             # Options: alpha_vantage, yfinance, eastmoney
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

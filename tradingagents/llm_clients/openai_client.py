@@ -1,8 +1,28 @@
+import logging
 import os
+import time
 from typing import Any, Optional
 
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
+
+logger = logging.getLogger(__name__)
+
+# Retry settings for transient connection errors
+_INVOKE_MAX_RETRIES = 5
+_INVOKE_INITIAL_DELAY = 2.0  # seconds
+_INVOKE_BACKOFF_FACTOR = 2.0
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """Check if exception is a transient connection/network error."""
+    name = type(exc).__name__
+    if "Connection" in name or "Timeout" in name:
+        return True
+    msg = str(exc).lower()
+    if "connection" in msg or "timeout" in msg or "temporarily" in msg:
+        return True
+    return False
 
 from .api_key_env import get_api_key_env
 from .base_client import BaseLLMClient, normalize_content
@@ -30,7 +50,23 @@ class NormalizedChatOpenAI(ChatOpenAI):
     """
 
     def invoke(self, input, config=None, **kwargs):
-        return normalize_content(super().invoke(input, config, **kwargs))
+        delay = _INVOKE_INITIAL_DELAY
+        for attempt in range(_INVOKE_MAX_RETRIES + 1):
+            try:
+                result = normalize_content(super().invoke(input, config, **kwargs))
+                # Small delay between successful calls to avoid rate limiting
+                time.sleep(1)
+                return result
+            except Exception as e:
+                if _is_connection_error(e) and attempt < _INVOKE_MAX_RETRIES:
+                    logger.warning(
+                        "Connection error (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt + 1, _INVOKE_MAX_RETRIES, delay, e,
+                    )
+                    time.sleep(delay)
+                    delay *= _INVOKE_BACKOFF_FACTOR
+                else:
+                    raise
 
     def with_structured_output(self, schema, *, method=None, **kwargs):
         caps = get_capabilities(self.model_name)
@@ -152,6 +188,7 @@ _PROVIDER_BASE_URL = {
     "minimax-cn": "https://api.minimaxi.com/v1",
     "openrouter": "https://openrouter.ai/api/v1",
     "ollama":     "http://localhost:11434/v1",
+    "mimo":       "https://token-plan-cn.xiaomimimo.com/v1",
 }
 
 
@@ -216,6 +253,12 @@ class OpenAIClient(BaseLLMClient):
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
 
+        # Default retry/timeout for third-party providers that may have
+        # less stable connections than native OpenAI.
+        if self.provider != "openai":
+            llm_kwargs.setdefault("max_retries", 5)
+            llm_kwargs.setdefault("timeout", 180)
+
         # Forward user-provided kwargs
         for key in _PASSTHROUGH_KWARGS:
             if key in self.kwargs:
@@ -228,7 +271,7 @@ class OpenAIClient(BaseLLMClient):
 
         # Provider-specific quirks live in their own subclasses so the
         # base NormalizedChatOpenAI stays free of provider branches.
-        if self.provider == "deepseek":
+        if self.provider in ("deepseek", "mimo"):
             chat_cls = DeepSeekChatOpenAI
         elif self.provider in ("minimax", "minimax-cn"):
             chat_cls = MinimaxChatOpenAI

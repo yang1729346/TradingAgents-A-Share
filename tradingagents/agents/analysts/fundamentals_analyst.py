@@ -11,6 +11,14 @@ from tradingagents.agents.utils.agent_utils import (
 from tradingagents.dataflows.config import get_config
 
 
+MAX_TOOL_ROUNDS = 3
+
+
+def _count_tool_rounds(messages):
+    """Count how many times the LLM has made tool calls so far."""
+    return sum(1 for m in messages if hasattr(m, "tool_calls") and m.tool_calls)
+
+
 def create_fundamentals_analyst(llm):
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]
@@ -52,7 +60,11 @@ def create_fundamentals_analyst(llm):
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        chain = prompt | llm.bind_tools(tools)
+        # After MAX_TOOL_ROUNDS, stop binding tools to force report generation.
+        if _count_tool_rounds(state["messages"]) >= MAX_TOOL_ROUNDS:
+            chain = prompt | llm
+        else:
+            chain = prompt | llm.bind_tools(tools)
 
         result = chain.invoke(state["messages"])
 
