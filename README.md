@@ -92,7 +92,7 @@
 
 ```bash
 # 克隆本仓库
-git clone https://github.com/你的用户名/TradingAgents.git
+git clone https://github.com/yang1729346/TradingAgents-A-Share.git
 cd TradingAgents
 
 # 创建虚拟环境
