@@ -211,39 +211,74 @@ class TradingAgentsGraph:
                 return benchmark
         return benchmark_map.get("", "SPY")
 
+    @staticmethod
+    def _parse_close_prices(csv_data: str) -> list:
+        """Extract (date, close) pairs from CSV data returned by data vendors."""
+        prices = []
+        for line in csv_data.split("\n"):
+            if not line or line.startswith("#") or line.startswith("Date"):
+                continue
+            parts = line.split(",")
+            if len(parts) >= 5:
+                try:
+                    prices.append((parts[0], float(parts[4])))  # Date, Close
+                except (ValueError, IndexError):
+                    continue
+        return prices
+
     def _fetch_returns(
         self, ticker: str, trade_date: str, holding_days: int = 5,
         benchmark: str = "SPY",
     ) -> Tuple[Optional[float], Optional[float], Optional[int]]:
         """Fetch raw and alpha return for ticker over holding_days from trade_date.
 
-        ``benchmark`` is the index used as the alpha baseline (resolved by the
-        caller via ``_resolve_benchmark``). Returns ``(raw_return, alpha_return,
-        actual_holding_days)`` or ``(None, None, None)`` if price data is
-        unavailable (too recent, delisted, or network error).
+        Uses the configured data vendor for A-share tickers, falls back to
+        yfinance for non-A-share tickers and benchmarks.
         """
+        from tradingagents.agents.utils.agent_utils import is_a_share
+        from tradingagents.dataflows.interface import route_to_vendor
+
         try:
             start = datetime.strptime(trade_date, "%Y-%m-%d")
-            end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
+            end = start + timedelta(days=holding_days + 7)
             end_str = end.strftime("%Y-%m-%d")
 
-            stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-            bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
+            if is_a_share(ticker):
+                stock_csv = route_to_vendor("get_stock_data", ticker, trade_date, end_str)
+                if isinstance(stock_csv, str) and (stock_csv.startswith("Error") or stock_csv.startswith("No ")):
+                    return None, None, None
+                stock_prices = self._parse_close_prices(stock_csv)
 
-            if len(stock) < 2 or len(bench) < 2:
-                return None, None, None
+                bench_csv = route_to_vendor("get_stock_data", benchmark, trade_date, end_str)
+                if isinstance(bench_csv, str) and (bench_csv.startswith("Error") or bench_csv.startswith("No ")):
+                    return None, None, None
+                bench_prices = self._parse_close_prices(bench_csv)
 
-            actual_days = min(holding_days, len(stock) - 1, len(bench) - 1)
-            raw = float(
-                (stock["Close"].iloc[actual_days] - stock["Close"].iloc[0])
-                / stock["Close"].iloc[0]
-            )
-            bench_ret = float(
-                (bench["Close"].iloc[actual_days] - bench["Close"].iloc[0])
-                / bench["Close"].iloc[0]
-            )
+                if len(stock_prices) < 2 or len(bench_prices) < 2:
+                    return None, None, None
+
+                actual_days = min(holding_days, len(stock_prices) - 1, len(bench_prices) - 1)
+                raw = (stock_prices[actual_days][1] - stock_prices[0][1]) / stock_prices[0][1]
+                bench_ret = (bench_prices[actual_days][1] - bench_prices[0][1]) / bench_prices[0][1]
+            else:
+                stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
+                bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
+
+                if len(stock) < 2 or len(bench) < 2:
+                    return None, None, None
+
+                actual_days = min(holding_days, len(stock) - 1, len(bench) - 1)
+                raw = float(
+                    (stock["Close"].iloc[actual_days] - stock["Close"].iloc[0])
+                    / stock["Close"].iloc[0]
+                )
+                bench_ret = float(
+                    (bench["Close"].iloc[actual_days] - bench["Close"].iloc[0])
+                    / bench["Close"].iloc[0]
+                )
+
             alpha = raw - bench_ret
-            return raw, alpha, actual_days
+            return float(raw), float(alpha), actual_days
         except Exception as e:
             logger.warning(
                 "Could not resolve outcome for %s on %s vs %s (will retry next run): %s",

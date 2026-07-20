@@ -1,97 +1,156 @@
-# TradingAgents（A股增强版）
+# TradingAgents - A股增强版
 
-基于 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) 多智能体金融交易框架的二次开发版本，针对 **A股（中国股市）** 进行了深度优化。
-
-## 原项目简介
-
-原项目 TradingAgents 是一个 LLM 多智能体交易框架，模拟真实交易团队的协作流程：
-
-- **分析师团队**：技术分析师、情绪分析师、新闻分析师、基本面分析师
-- **研究员团队**：多头研究员 vs 空头研究员进行辩论
-- **交易员**：综合分析结果制定交易计划
-- **风控团队**：激进派、保守派、中立派进行风险辩论
-- **投资组合经理**：做出最终买卖决策
+基于 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) 多智能体 LLM 金融交易框架，针对 **A 股市场** 进行了深度适配与工程化改进。
 
 > 原项目论文：[TradingAgents: Multi-Agents LLM Financial Trading Framework](https://arxiv.org/abs/2412.20138)
 
-## 本版本的主要修改
+---
 
-### 1. 新增东方财富数据源（核心改动）
+## 系统架构
 
-| 项目 | 原项目 | 本版本 |
-|------|--------|--------|
-| 默认数据源 | yfinance（Yahoo Finance） | **东方财富（Eastmoney）** |
-| A股数据 | 不支持 | **原生支持**（沪深京三市） |
-| 数据接口 | 需翻墙，经常被限速 | **国内直连，稳定快速** |
+系统模拟真实投资团队的决策流程，通过 LangGraph StateGraph 编排 5 个阶段的多智能体协作：
 
-新增文件：`tradingagents/dataflows/eastmoney.py`（约410行）
+```
+输入股票代码 + 日期
+        │
+        ▼
+┌─────────────────────────────────┐
+│  Phase 1: 分析师团队（并行）       │
+│  ├─ 技术分析师（K线、MACD、RSI…）  │
+│  ├─ 情绪分析师（新闻、公告…）      │
+│  ├─ 新闻分析师（宏观、行业…）      │
+│  └─ 基本面分析师（财报、估值…）    │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  Phase 2: 研究员辩论              │
+│  ├─ 多头研究员（看多论证）         │
+│  ├─ 空头研究员（看空论证）         │
+│  └─ 研究主管（综合决策）           │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  Phase 3: 交易员制定计划           │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  Phase 4: 风控团队辩论             │
+│  ├─ 激进派                        │
+│  ├─ 保守派                        │
+│  └─ 中立派                        │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  Phase 5: 投资组合经理最终决策     │
+└─────────────────────────────────┘
+```
 
-支持的功能：
-- 股票K线数据（日线/周线/月线）
-- 技术指标计算（MACD、RSI、布林带等）
-- 财务报表（资产负债表、利润表、现金流量表）
-- 公司基本面数据
-- 个股新闻和全球财经新闻
-- 股票代码自动转换（000630.SZ → 东方财富格式）
+---
 
-### 2. 新增小米 MIMO 大模型支持
+## 技术栈
 
-| 项目 | 说明 |
+| 类别 | 技术 |
 |------|------|
-| 快速模型 | MiMo-v2.5 |
-| 深度模型 | MiMo-v2.5-Pro |
-| API地址 | `https://token-plan-cn.xiaomimimo.com/v1` |
+| **框架** | LangGraph (StateGraph)、LangChain |
+| **LLM 支持** | OpenAI、DeepSeek、MiMo、GLM、MiniMax、Qwen 等 15+ 供应商 |
+| **数据源** | 东方财富（A 股）、Yahoo Finance（美股）、FinnHub |
+| **持久化** | SQLite Checkpoint（崩溃恢复） |
+| **输出格式** | Pydantic 结构化 Schema + 自由文本 |
+| **语言** | Python 3.13 |
 
-修改文件：`model_catalog.py`、`openai_client.py`、`api_key_env.py`、`factory.py`
+---
 
-### 3. XML 工具调用解析（提升兼容性）
+## 核心技术实现
 
-部分国产大模型返回工具调用时使用XML格式而非标准JSON，原项目无法解析。本版本在 `base_client.py` 中增加了正则表达式解析，自动识别并转换XML格式的工具调用，兼容更多模型。
+### 1. 多供应商容错路由
 
-### 4. 工具调用轮次限制（防止死循环）
+数据获取采用三级供应商解析 + 自动降级机制：
 
-在三个分析师节点中增加了 `MAX_TOOL_ROUNDS = 3` 限制：
-- `market_analyst.py`
-- `news_analyst.py`
-- `fundamentals_analyst.py`
+```
+tool_vendors（工具指定） → data_vendors_cn（A股专用） → data_vendors（通用）
+```
 
-当LLM连续3轮都发起工具调用时，强制停止绑定工具，促使其输出分析报告，防止无限循环。
+通过 `_is_cn_ticker()` 自动识别 `.SZ`/`.SH` 后缀，路由到国内数据源。当主供应商异常时，自动切换到备选供应商，返回错误信息而非崩溃。
+
+### 2. XML 工具调用解析
+
+部分国产大模型（MiMo、GLM）返回工具调用时使用 XML 格式而非标准 JSON。系统通过正则表达式自动识别并转换：
+
+```python
+_FUNC_CALL_RE = re.compile(r'<function_call>(.*?)</function_call>', re.DOTALL)
+_PARAM_RE     = re.compile(r'<(\w+)>(.*?)</\1>', re.DOTALL)
+```
+
+在 `normalize_content()` 中检测 `response.tool_calls` 为空时，自动从 `content` 中提取 XML 格式的函数调用并转换为标准 ToolCall 对象。
+
+### 3. 双模型架构
+
+| 模型类型 | 用途 | 默认配置 |
+|----------|------|----------|
+| `deep_think_llm` | 研究主管、投资组合经理（决策节点） | gpt-5.4 |
+| `quick_think_llm` | 分析师、研究员、交易员（执行节点） | gpt-5.4-mini |
+
+决策节点使用更强的模型进行综合判断，执行节点使用更快的模型完成具体分析任务。
+
+### 4. 工具调用轮次限制
+
+分析师节点设置 `MAX_TOOL_ROUNDS = 2`，通过 `_count_tool_rounds()` 统计工具调用消息数量。达到上限后自动解绑工具，强制 LLM 输出分析结论，防止无限循环。
 
 ### 5. 请求重试与限速保护
 
-`openai_client.py` 中新增：
-- 指数退避重试（最多5次，初始延迟2秒，退避因子2倍）
-- 调用间隔1秒限速（避免API限流）
-- 连接错误自动识别与重试
-- 非OpenAI供应商默认 `max_retries=5`、`timeout=180`
+- 指数退避重试：2s → 4s → 8s → 16s → 32s，最多 5 次
+- 仅对连接错误重试，业务错误直接抛出
+- 非 OpenAI 供应商默认 `max_retries=5`、`timeout=180`
 
-### 6. 数据源容错改进
+### 6. SQLite 崩溃恢复
 
-`interface.py` 中改进了 `route_to_vendor()` 函数：
-- 捕获所有异常（原项目只捕获特定异常）
-- 检查返回结果是否为空或错误
-- 返回错误提示字符串而非直接崩溃
-- 记录警告日志便于排查
+每个股票代码独立一个 SQLite 数据库文件，通过 SHA256 生成确定性 `thread_id`。系统崩溃后可从最近的 checkpoint 恢复执行，避免重复计算。
 
-### 7. 其他修改
+---
 
-- `.gitignore`：增加 `reports/`、`y/` 目录排除
-- 默认配置：数据源切换为东方财富，支持中文输出
+## 实际分析效果
 
-## 对A股分析的优势
+以下为系统对真实股票的分析输出示例：
 
-| 优势 | 说明 |
-|------|------|
-| **数据直连** | 东方财富API国内直连，无需翻墙，无速率限制 |
-| **A股原生支持** | 直接输入沪深京股票代码（如 `000630`、`600519`）即可分析 |
-| **中文输出** | 支持中文分析报告，更符合国内用户习惯 |
-| **国产模型适配** | MIMO等国产模型的XML工具调用格式已兼容 |
-| **运行稳定** | 重试机制+限速保护+容错处理，长时间运行不易崩溃 |
+### A 股分析：华电辽能（600396.SH）
 
-## 安装与使用
+系统生成了完整的五阶段分析报告，包含：
+
+- **技术分析**：MACD 2.66、RSI 75.32、KDJ K 值 89.11，识别出极端超买状态
+- **情绪分析**：宏观流动性宽松与贸易摩擦并存，公司层面"静默"
+- **新闻分析**：央行 5000 亿逆回购、地缘局势、能源行业政策
+- **研究员辩论**：多头与空头围绕"流动性驱动 vs 基本面脱节"展开 5 轮辩论
+- **风控辩论**：激进派、保守派、中立派三方就"卖出时机与仓位管理"激烈交锋
+- **最终决策**：投资组合经理综合研判，给出 **卖出** 建议
+
+> 完整报告示例：[`reports/600396.SH_20260604_180515/`](reports/600396.SH_20260604_180515/)
+
+### 美股分析：Marvell Technology（MRVL）
+
+系统同样支持美股分析，已完成对 MRVL、AVGO、GLW 等标的的多轮分析：
+
+> 完整报告示例：[`reports/MRVL_20260620_215103/`](reports/MRVL_20260620_215103/)
+
+---
+
+## A 股适配改进
+
+相比原项目，本版本针对 A 股市场进行了以下改进：
+
+| 改进项 | 说明 |
+|--------|------|
+| **数据源切换** | 默认使用东方财富 API，国内直连，无需翻墙 |
+| **A 股原生支持** | 直接输入沪深京股票代码（如 `000630`、`600519`）即可分析 |
+| **中文输出** | 分析报告默认中文，符合国内用户习惯 |
+| **国产模型适配** | MiMo、GLM 等模型的 XML 工具调用格式已兼容 |
+| **稳定性增强** | 重试机制 + 限速保护 + 容错路由，长时间运行不易崩溃 |
+
+---
+
+## 快速开始
 
 ```bash
-# 克隆本仓库
+# 克隆仓库
 git clone https://github.com/yang1729346/TradingAgents-A-Share.git
 cd TradingAgents
 
@@ -102,11 +161,12 @@ conda activate tradingagents
 # 安装依赖
 pip install .
 
-# 配置环境变量（复制 .env.example 为 .env，填入API密钥）
+# 配置 API 密钥
 cp .env.example .env
+# 编辑 .env 填入你的 API Key
 ```
 
-Python 使用示例：
+**Python 调用：**
 
 ```python
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -117,7 +177,7 @@ _, decision = ta.propagate("600519", "2026-01-15")  # 贵州茅台
 print(decision)
 ```
 
-CLI 使用：
+**CLI 使用：**
 
 ```bash
 tradingagents
@@ -125,9 +185,39 @@ tradingagents
 python -m cli.main
 ```
 
+---
+
+## 项目结构
+
+```
+TradingAgents/
+├── tradingagents/
+│   ├── agents/
+│   │   ├── analysts/          # 分析师（技术、情绪、新闻、基本面）
+│   │   ├── researchers/       # 研究员（多头、空头、主管）
+│   │   ├── trader/            # 交易员
+│   │   └── risk_mgmt/         # 风控（激进、保守、中立）
+│   ├── graph/
+│   │   ├── trading_graph.py   # 主编排器
+│   │   ├── setup.py           # 图组装
+│   │   └── checkpointer.py    # SQLite 崩溃恢复
+│   ├── dataflows/
+│   │   ├── interface.py       # 供应商路由与容错
+│   │   └── eastmoney.py       # 东方财富数据源
+│   ├── llm_clients/
+│   │   ├── base_client.py     # XML 工具调用解析
+│   │   ├── openai_client.py   # 重试与限速
+│   │   └── factory.py         # 15+ 供应商工厂
+│   └── default_config.py      # 配置（双模型、供应商链）
+├── reports/                   # 历史分析报告
+└── cli/                       # 命令行界面
+```
+
+---
+
 ## 致谢
 
-本项目基于 **[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)** 进行二次开发。感谢原作者 Yijia Xiao、Edward Sun、Di Luo、Wei Wang 的杰出工作。
+本项目基于 **[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)** 进行二次开发。感谢原作者 Yijia Xiao、Edward Sun、Di Luo、Wei Wang 的工作。
 
 ```
 @misc{xiao2025tradingagentsmultiagentsllmfinancial,

@@ -109,6 +109,9 @@ _INDICATOR_DESCRIPTIONS = {
     "atr": "Average True Range - volatility measure",
     "vwma": "Volume Weighted Moving Average",
     "mfi": "Money Flow Index - volume-weighted RSI",
+    "kdjk": "KDJ K line - stochastic momentum (common in A-share analysis)",
+    "kdjd": "KDJ D line - smoothed K value, overbought >80 / oversold <20",
+    "kdjj": "KDJ J line - divergence signal (J=3K-2D), extreme values flag reversals",
 }
 
 
@@ -163,6 +166,9 @@ def get_indicators(
             "atr": "atr_14",
             "vwma": "vwma",
             "mfi": "mfi_14",
+            "kdjk": "kdjk",
+            "kdjd": "kdjd",
+            "kdjj": "kdjj",
         }
 
         col = indicator_map.get(indicator)
@@ -317,7 +323,7 @@ def get_income_statement(ticker: str, freq: str = "quarterly",
 
 
 def get_news(ticker: str, start_date: str, end_date: str) -> str:
-    """Get company-specific news from Sina Finance (reliable for A-shares)."""
+    """Get company-specific news via Sina Finance API (eastmoney module fallback)."""
     stock_code = ticker.split(".")[0]
     try:
         url = "https://feed.mix.sina.com.cn/api/roll/get"
@@ -348,7 +354,7 @@ def get_news(ticker: str, start_date: str, end_date: str) -> str:
 
 
 def get_global_news(curr_date: str, look_back_days: int = None, limit: int = None) -> str:
-    """Get macro/global news from Sina Finance."""
+    """Get macro/global news via Sina Finance API (eastmoney module fallback)."""
     try:
         url = "https://feed.mix.sina.com.cn/api/roll/get"
         params = {

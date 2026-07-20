@@ -36,13 +36,40 @@ def get_language_instruction() -> str:
     return f" Write your entire response in {lang}."
 
 
+def is_a_share(ticker: str) -> bool:
+    """Return True if the ticker is a Chinese A-share stock."""
+    upper = ticker.upper()
+    return upper.endswith(".SZ") or upper.endswith(".SH")
+
+
+_A_SHARE_MARKET_RULES = (
+    "\n\n## A-share market rules (critical for analysis accuracy)\n"
+    "- T+1 trading: shares bought today cannot be sold until the next trading day.\n"
+    "- Price limits: main board ±10%, ChiNext/STAR ±20%, ST stocks ±5%. "
+    "A stock hitting the limit signals extreme sentiment, not just a large move.\n"
+    "- Trading hours: 09:30-11:30, 13:00-15:00 (CST). Call auction 09:15-09:25.\n"
+    "- No short selling for most retail investors; margin trading is restricted.\n"
+    "- Financial reports: annual (April 30 deadline), semi-annual (Aug 31), "
+    "quarterly (Q1 by Apr 30, Q3 by Oct 31).\n"
+    "- Key sentiment drivers: Northbound capital flow (via Stock Connect), "
+    "PBOC policy (RRR cuts, MLF, LPR), CSRC regulatory announcements, "
+    "state media commentary (People's Daily, Xinhua).\n"
+    "- Technical indicator caveats: RSI and Bollinger Bands can stay at extremes "
+    "longer due to price limits; volume spikes at limit-up/limit-down are "
+    "meaningful signals.\n"
+)
+
+
 def build_instrument_context(ticker: str) -> str:
     """Describe the exact instrument so agents preserve exchange-qualified tickers."""
-    return (
+    base = (
         f"The instrument to analyze is `{ticker}`. "
         "Use this exact ticker in every tool call, report, and recommendation, "
-        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`)."
+        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `.SZ`, `.SH`)."
     )
+    if is_a_share(ticker):
+        base += _A_SHARE_MARKET_RULES
+    return base
 
 def create_msg_delete():
     def delete_messages(state):

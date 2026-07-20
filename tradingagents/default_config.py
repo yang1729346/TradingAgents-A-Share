@@ -90,13 +90,20 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "ECB Bank of England BOJ central bank policy",
         "oil commodities supply chain energy",
     ],
+    "global_news_queries_cn": [
+        "央行 货币政策 降准 降息 MLF LPR",
+        "沪深300 GDP 经济数据 PMI CPI",
+        "证监会 IPO 监管 政策 注册制",
+        "北向资金 外资 QFII 陆股通",
+        "地缘政治 贸易摩擦 制裁 供应链",
+    ],
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
-        "core_stock_apis": "eastmoney",       # Options: alpha_vantage, yfinance, eastmoney
-        "technical_indicators": "eastmoney",  # Options: alpha_vantage, yfinance, eastmoney
-        "fundamental_data": "eastmoney",      # Options: alpha_vantage, yfinance, eastmoney
-        "news_data": "eastmoney",             # Options: alpha_vantage, yfinance, eastmoney
+        "core_stock_apis": "investoday",      # Options: alpha_vantage, yfinance, eastmoney, tushare, investoday
+        "technical_indicators": "investoday", # Options: alpha_vantage, yfinance, eastmoney, tushare, investoday
+        "fundamental_data": "investoday",     # Options: alpha_vantage, yfinance, eastmoney, tushare, investoday
+        "news_data": "investoday",            # Options: cninfo, eastmoney, alpha_vantage, yfinance, tushare, investoday
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
@@ -110,13 +117,15 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # while non-US tickers get their regional index automatically.
     "benchmark_ticker": None,
     "benchmark_map": {
-        ".NS":  "^NSEI",    # NSE India (Nifty 50)
-        ".BO":  "^BSESN",   # BSE India (Sensex)
-        ".T":   "^N225",    # Tokyo (Nikkei 225)
-        ".HK":  "^HSI",     # Hong Kong (Hang Seng)
-        ".L":   "^FTSE",    # London (FTSE 100)
-        ".TO":  "^GSPTSE",  # Toronto (TSX Composite)
-        ".AX":  "^AXJO",    # Australia (ASX 200)
-        "":     "SPY",      # default for US-listed tickers (no suffix)
+        ".SZ":  "000300.SZ",  # A-share Shenzhen (CSI 300)
+        ".SH":  "000300.SH",  # A-share Shanghai (CSI 300)
+        ".NS":  "^NSEI",      # NSE India (Nifty 50)
+        ".BO":  "^BSESN",     # BSE India (Sensex)
+        ".T":   "^N225",      # Tokyo (Nikkei 225)
+        ".HK":  "^HSI",       # Hong Kong (Hang Seng)
+        ".L":   "^FTSE",      # London (FTSE 100)
+        ".TO":  "^GSPTSE",    # Toronto (TSX Composite)
+        ".AX":  "^AXJO",      # Australia (ASX 200)
+        "":     "SPY",        # default for US-listed tickers (no suffix)
     },
 })
