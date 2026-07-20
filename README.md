@@ -215,21 +215,16 @@ TradingAgents/
 
 ---
 
-## 致谢
+## 解决的问题
 
-本项目基于 **[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)** 进行二次开发。感谢原作者 Yijia Xiao、Edward Sun、Di Luo、Wei Wang 的工作。
+个人投资者在做交易决策时，通常只看一两个指标或听消息就下单，缺乏机构投资者那样的多维度分析团队。本工具面向 **个人投资者和量化研究爱好者**，用 LLM 多智能体模拟了一个完整的投研团队：
 
-```
-@misc{xiao2025tradingagentsmultiagentsllmfinancial,
-      title={TradingAgents: Multi-Agents LLM Financial Trading Framework},
-      author={Yijia Xiao and Edward Sun and Di Luo and Wei Wang},
-      year={2025},
-      eprint={2412.20138},
-      archivePrefix={arXiv},
-      primaryClass={q-fin.TR},
-      url={https://arxiv.org/abs/2412.20138},
-}
-```
+- **信息盲区**：个人投资者很难同时跟踪技术面、情绪面、新闻面和基本面。系统让 4 个分析师并行覆盖不同维度，再通过辩论机制交叉验证，避免单一视角的偏见。
+- **情绪化决策**：散户容易追涨杀跌。系统通过多头/空头辩论和三方风控辩论，强制呈现正反两面论据，输出经过"对抗性检验"的结论。
+- **缺乏系统性**：机构有标准化的投研流程，个人投资者往往没有。系统将"分析→辩论→交易计划→风控评估→最终决策"固化为可重复的 pipeline，每次分析都走完整流程。
+- **A 股数据获取困难**：原项目依赖 Yahoo Finance，国内访问不稳定。本版本直接对接东方财富 API，输入沪深京股票代码即可运行。
+
+---
 
 ## 免责声明
 
